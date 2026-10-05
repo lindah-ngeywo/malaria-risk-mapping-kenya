@@ -1,0 +1,588 @@
+\chapter{RESEARCH METHODOLOGY}
+
+\section{Introduction}
+
+The methodology will  develop the malaria prediction and mapping framework for Kenya. We will  integrate climatic, environmental, demographic, intervention, and temporal variables to model malaria transmission patterns across the 47 counties of Kenya. The methodology consists of data preparation, preprocessing, feature engineering, model development, model evaluation, explainability analysis, and spatial malaria risk mapping. Random Forest and XGBoost would  be implemented as baseline ML models and compared with hybrid DL architectures including CNN-LSTM, CNN-GRU, and CNN-Transformer.
+
+The chapter presents the study area, dataset structure, preprocessing procedures, model formulations, training strategies, evaluation metrics, SHAP-based explainability analysis, and spatial malaria risk mapping techniques.
+
+\section{Study Area and Data Structure}
+\label{sec:study_area}
+Focusing  Kenya as the study area, Kenya  is located in East Africa and has a population of over 50 million people \cite{WHO_malaria_2024}. Malaria transmission varies  across the country such that  the western region surrounding Lake Victoria experiences year-round malaria transmission because of warm temperatures and high rainfall \cite{amek2012spatial}. Coastal areas along the Indian Ocean also experience relatively high malaria transmission, whereas the central and northern regions generally show lower risk because of higher altitude and drier climatic conditions \cite{Snow2015}. Understanding this spatial variation  is critical for building prediction models that work well across different parts of Kenya.
+
+\subsection{Data Structure and Outcome Variable}
+The dataset included monthly malaria incidence records and associated predictor variables collected from all 47 counties in Kenya between January 2016 and December 2025. Each observation  corresponded to a specific county and month, allowing the data to capture both spatial and temporal variations in malaria transmission. The panel structure enabled the analysis of seasonal malaria trends as well as geographical differences across the country throughout the study period. The general structure is
+\[
+\mathcal{D} = \{(Y_{it}, X_{it1}, X_{it2}, \dots, X_{itp}) : i = 1, \dots, 47; \ t = 1, \dots, T\},
+\]
+where:
+\begin{itemize} 
+	\item \( Y_{it} \) is the malaria outcome in county \( i \) at month \( t \),
+	\item \( X_{itk} \) is the value of predictor \( k \) in county \( i \) at month \( t \),
+	\item \( p \) is the number of predictors.
+\end{itemize}
+
+\subsection{Outcome Variable}
+The primary outcome is malaria incidence rate per 1,000 population. We compute incidence rate as:
+\[
+I_{it} = \frac{Y_{it}}{P_{it}} \times 1000,
+\]
+where $(Y_{it})$ denotes the number of confirmed malaria cases reported in county (i) during month (t), and $(P_{it})$ denotes the corresponding county population at time (t), estimated from annual population projections. Using incidence rates rather than raw case counts helps account for differences in population size across counties \cite{WHO_malaria_2024}, enabling fair comparisons across counties with different population densities.
+
+\subsection{Predictor Variables}
+\label{sec:predictor_variables}
+We grouped the predictor variables into four different categories: climatic, environmental, demographic, and intervention. Let
+\[
+\mathbf{X}_{it} = \bigl( \text{Rain}_{it}, \text{Temp}_{it}, \text{Hum}_{it}, \text{NDVI}_{it}, \text{PopDens}_{it}, \text{ITN}_{it}, \text{IRS}_{it}, \text{Treat}_{it} \bigr).
+\]
+
+The variables are defined as follows:
+\begin{itemize}
+	\item \(\text{Rain}_{it}\): rainfall in county \(i\) at month \(t\) (mm),
+	\item \(\text{Temp}_{it}\): mean temperature (°C),
+	\item \(\text{Hum}_{it}\): relative humidity (\%),
+	\item \(\text{NDVI}_{it}\): Normalised Difference Vegetation Index,
+	\item \(\text{PopDens}_{it}\): population density,
+	\item \(\text{ITN}_{it}\): insecticide‑treated net coverage (\%),
+	\item \(\text{IRS}_{it}\): indoor residual spraying coverage (\%),
+	\item \(\text{Treat}_{it}\): treatment access or coverage (\%).
+\end{itemize}
+
+Each variable captures a specific component of malaria transmission such that climate affects vector biology \cite{Caminade2023}, environment determines habitat suitability, demographics influence exposure \cite{Chirebvu2014}, and interventions reduce transmission risk.
+
+
+\section{Data Preprocessing}
+
+Before we formulate and develop the models, we  cleaned and prepared  the dataset to ensure consistency, temporal continuity, and reliable model training.
+
+\subsection{Missing Data}
+
+The dataset was checked for missing values, duplicate records, and inconsistent temporal ordering across all county-month observations before analysis. No major missing values were identified after data integration. However, a few observations became unavailable during the creation of lagged climatic variables because earlier monthly records were not available at the beginning of the sequence. We removed  the observations before model training. Variable formats and temporal records were also reviewed during preprocessing to ensure consistency across the study period.
+
+\subsection{Feature Engineering and lag Features}
+\label{sec:feature_scaling}
+\label{sec:lagged_features}
+We performed feature engineering on ML and deep learning models to help it learn complex malaria transmission patterns across counties and time periods . All the models were trained using climatic, environmental, demographic, intervention, and temporal predictors commonly applied in malaria forecasting studies. 
+
+Since malaria transmission does not respond immediately to environmental changes \cite{Bhatt2015}, we created lagged climatic variables to capture delayed effects associated with mosquito breeding and parasite development. For each climatic variable, one, two, and three month ago were generated:
+
+\[
+X_{it}^{(l)} = X_{i,t-l}, \quad l = 1,2,3
+\]
+
+where \(l\) represents the lag period in months. These lagged variables allowed the models to learn how previous rainfall, temperature, and humidity conditions influence current malaria incidence \cite{Okundalaye2025Climate-based}.
+
+For the hybrid deep learning models, we introduced additional engineered features to better represent the spatial and temporal dynamics of malaria transmission, improving the models’ ability to capture complex patterns across counties and time periods \cite{Srivastava2025}. We generated rolling statistical features  using moving averages of climatic variables across previous months. It helped the model to learn broader climatic trends associated with malaria outbreaks and smoothen short-term fluctuations. We also created interaction variables  between rainfall and NDVI to represent combined environmental suitability conditions for mosquito breeding. This was important because malaria transmission is often influenced by the interaction of multiple environmental conditions rather than a single climatic factor independently. To preserve seasonal malaria transmission cycles, we applied cyclical temporal encoding  using sine and cosine transformations of monthly observations \cite{Goodfellow-et-al-2016}. Unlike ordinary numerical month values, cyclical encoding preserves the continuous seasonal relationship between months such as December and January, allowing the models to learn recurring transmission patterns more effectively.
+
+\subsection{Feature scaling}
+\label{sec:feature_scaling}
+Prior to model training, all continuous variables were standardized to improve numerical stability during optimization. This was particularly important for the hybrid deep learning models because predictor variables existed on different numerical scales. For example, rainfall values measured in millimeters contained much larger numerical values compared to NDVI and temperature variables. We address this using  z-score normalization \cite{Srivastava2025} given as:
+
+\[
+Z_{itk} = \frac{X_{itk} - \mu_k}{\sigma_k}
+\]
+
+where \(\mu_k\) represents the mean of variable \(k\) and \(\sigma_k\) represents its standard deviation. The transformation standardizes the variables such that the transformed features have a mean close to zero and a standard deviation close to one. 
+
+\subsection{Chronological Data Splitting }
+\label{sec:data_splitting}
+
+To preserve temporal dependencies and avoid information leakage, the dataset was divided chronologically. Observations from January 2016 to December 2022 were used for model training, while observations from January 2023 to December 2025 were reserved for testing. Approximately 69\% of the dataset was used for training and 31\% for testing. Additionally, 10\% of the training data were used for validation during deep learning model training.
+
+
+\section{Model Formulation}
+\label{sec:model_formulation}
+
+After preprocessing, the next step is building prediction models. The goal is to learn a relationship between the predictors and malaria incidence. The prediction problem is defined as \cite{Goodfellow-et-al-2016}:
+
+\[
+\hat{I}_{it} = f(X_{it}).
+\]
+The function \(f(\cdot)\) represents an unknown nonlinear function that maps predictor variables to malaria incidence. We estimate \(f(\cdot)\) such that the prediction error is minimized over the observed data. Machine learning models estimate \(f(\cdot)\) directly from data without assuming a predefined linear relationship between predictors and malaria incidence.
+
+\subsection{Random Forest}
+Random Forest combines multiple decision trees trained on bootstrap samples to improve predictive stability and reduce overfitting \cite{Egbuna2025}. The final prediction is obtained by averaging predictions from individual trees:
+\[
+\hat{I}_{it}^{RF} = \frac{1}{B} \sum_{b=1}^{B} f_b(X_{it}),
+\]
+
+here, \(B\) is the number of trees and \(f_b\) is the prediction from tree \(b\).
+
+
+The ensemble  structure enables RF to capture non-linear patterns and interactions between variables without need for specification. RF has been used successfully for malaria prediction in sub-Saharan Africa \cite{Egbuna2025}.
+
+\subsection{XGBoost}
+\label{sec:XGBoost}
+XGBoost builds models step by step. Each new tree tries to fix the errors made by previous trees \cite{Okundalaye2025Climate-based}. The model minimizes a regularized objective function:
+
+\[
+\mathcal{L}^{(t)} = \sum_{i=1}^{n} l(y_i, \hat{y}_i^{(t)}) + \sum_{k=1}^{t} \Omega(f_k),
+\]
+
+where the first term measures prediction error using a loss function \(l(\cdot)\) and the second term penalizes model complexity to prevent overfitting \cite{Egbuna2025} using gradient boosting mechanism. The regularization term is:
+
+\[
+\Omega(f) = \gamma T + \frac{1}{2} \lambda \|w\|^2,
+\]
+
+where:
+\begin{itemize}
+	\item $T$ is the number of leaves in the tree,
+	\item $w$ represents leaf weights,
+	\item $\gamma$ and $\lambda$ are regularization parameters.
+\end{itemize}
+At each iteration, a new function $f_t(\cdot)$ is added to minimize the loss:
+
+
+\[
+\hat{y}^{(t)} = \hat{y}^{(t-1)} + f_t(X).
+\]
+
+The additive model allows XGBoost to progressively correct prediction errors, leading to improved accuracy. Including regularization reduces overfitting and enhances generalization performance \cite{Ly2025Forecasting}.
+
+
+
+\subsection{Deep Learning Models}
+
+Traditional ML models like RF and XGBoost capture non-linear patterns well. However, they do not handle sequential dependencies in the data. Malaria risk today depends partly on conditions weeks or months ago \cite{Okundalaye2025Climate-based}. Deep learning models address this limitation by learning temporal patterns directly from data. Recurrent neural networks were used to model temporal malaria dependencies, while convolutional layers learned localized interactions among climatic and environmental predictors.
+
+\subsection{Long Short-Term Memory (LSTM)}
+
+LSTM networks solve a key problem in recurrent neural networks that is the vanishing gradient problem \cite{Okundalaye2025Climate-based}. They use memory cells and gates to control information flow over time.
+
+At each time step \(t\), three gates operate:
+
+The forget gate decides what to discard from memory (If rainfall from several months
+ago is no longer relevant, the forget gate reduces its influence):
+
+\[
+f_t = \sigma(W_f x_t + U_f h_{t-1} + b_f).
+\]
+
+The input gate decides what new information to add (Recent increases in rainfall or
+humidity may be added into memory because they may influence future
+malaria transmission):
+
+\[
+i_t = \sigma(W_i x_t + U_i h_{t-1} + b_i),
+\]
+\[
+\tilde{c}_t = \tanh(W_c x_t + U_c h_{t-1} + b_c).
+\]
+
+The cell state is then updated:
+
+\[
+c_t = f_t \odot c_{t-1} + i_t \odot \tilde{c}_t.
+\]
+
+Finally, the output gate produces the hidden state:
+
+\[
+o_t = \sigma(W_o x_t + U_o h_{t-1} + b_o),
+\]
+\[
+h_t = o_t \odot \tanh(c_t),
+\]
+
+where:
+\begin{itemize}
+	\item $x_t$ is the input at time $t$,
+	\item $h_{t-1}$ is the previous hidden state,
+	\item $c_{t-1}$ is the previous cell state,
+	\item $W$, $U$, and $b$ are the weights and biases.
+\end{itemize}
+LSTM model have been applied in malaria forecasting studies because of their ability to model delayed temporal relationships in epidemiological and climatic time-series data \cite{Okundalaye2025Climate-based}.
+
+\subsection{Gated Recurrent Unit (GRU)}
+
+GRU is a simpler alternative to LSTM. It combines the forget and input gates into one update gate, reducing the number of parameters \cite{Goodfellow-et-al-2016} . The update gate and reset gate are:
+
+\[
+z_t = \sigma(W_z x_t + U_z h_{t-1}),
+\]
+\[
+r_t = \sigma(W_r x_t + U_r h_{t-1}).
+\]
+
+The candidate hidden state is:
+
+\[
+\tilde{h}_t = \tanh(W x_t + U(r_t \odot h_{t-1})).
+\]
+
+And the final hidden state is:
+
+\[
+h_t = (1 - z_t) \odot h_{t-1} + z_t \odot \tilde{h}_t.
+\]
+
+GRU models are computationally efficient and are particularly useful when working with limited datasets while still capturing temporal dependencies in malaria incidence.
+
+
+\subsection{Convolutional Neural Network (CNN)}
+
+CNN layers were used to learn localized interactions among climatic, environmental, and temporal predictors before sequential modelling. A convolution operation applies a filter across the input:
+
+\[
+h_i = \sigma \left( \sum_{j=1}^{k} w_j x_{i+j} + b \right),
+\]
+
+where:
+\begin{itemize}
+	\item $w_j$ are learnable filter weights,
+	\item $k$ is the kernel size,
+	\item $\sigma(\cdot)$ is an activation function.
+\end{itemize}
+
+The convolution process captures localized feature relationships, including interactions among climatic and environmental variables associated with malaria transmission. Pooling operations were applied to reduce dimensionality while retaining dominant feature representations \cite{Ooko2024}:
+
+\[
+h_{pool} = \max(h_i).
+\]
+
+This means that, for each pooling window, only the strongest feature response was retained while smaller activations were discarded. For example, if a particular combination of rainfall, humidity, and temperature strongly indicated increased malaria risk, the pooling layer preserved that dominant feature representation. The reduced feature maps were then forwarded to the temporal learning layers, where sequential malaria patterns across time were learned.
+
+\subsection{Hybrid Deep Learning Models}
+\label{sec:hybrid_models}
+
+Hybrid architectures combine these components within a unified framework to improve representation of malaria transmission dynamics \cite{Srivastava2025}. LSTM and GRU architectures are effective for modelling temporal malaria patterns but have limited ability to learn localized feature interactions directly from predictor sequences. In contrast, CNN layers capture localized relationships among environmental and climatic variables but do not independently model long-term temporal dependencies Thus, both are combine to work effectively.
+The general hybrid framework is expressed as:
+
+\[
+\hat{I}_{it} = g\left( \mathcal{T} \left( \mathcal{S}(X_{i,t-L:t}) \right) \right),
+\]
+
+where:
+\begin{itemize}
+	\item $\mathcal{S}(\cdot)$ represents localized feature learning using CNN layers,
+	\item $\mathcal{T}(\cdot)$ represents temporal sequence modelling using LSTM, GRU, or Transformer architectures,
+	\item $g(\cdot)$ represents the output prediction layer,
+	\item $L$ denotes the look-back window.
+\end{itemize}
+
+The framework enables sequential learning models to operate on higher-level feature representations derived from climatic, environmental, and temporal predictors.
+
+
+\subsection{CNN-LSTM}
+
+We implement the CNN-LSTM model in two stages. Convolutional layers were first applied to sequential predictor inputs to extract localized feature interactions among climatic and environmental variables \cite{Srivastava2025},
+
+\[
+h^{(s)}_t = CNN(X_{i,t-L:t}).
+\]
+Then resulting feature representations were subsequently processed by the LSTM network:	
+\[
+h^{(t)}_t = LSTM(h^{(s)}_t, h^{(t)}_{t-1}).
+\]
+
+The final prediction is:
+
+\[
+\hat{I}_{it} = W h^{(t)}_t + b.
+\]
+For the CNN-LSTM architecture, convolutional filter sizes and the number of LSTM hidden units were adjusted iteratively to improve  localized feature interaction and temporal learning performance. Smaller filter sizes captured localized environmental interactions more effectively, while larger hidden layers improved temporal memory representation. Dropout regularization was applied between layers to reduce overfitting during training.
+
+\subsection{CNN-GRU}
+
+The CNN-GRU model replaces LSTM with GRU for efficiency:
+
+\[
+h^{(s)}_t = CNN(X_{i,t-L:t}),
+\]
+\[
+h^{(t)}_t = GRU(h^{(s)}_t, h^{(t)}_{t-1}),
+\]
+\[
+\hat{I}_{it} = W h^{(t)}_t + b.
+\]
+
+The GRU component simplifies the gating mechanism while retaining the ability to model temporal dependencies. This model is particularly suitable when computational efficiency is required or when the dataset size is limited \cite{Muriithi2024A}. Compared to LSTM, the GRU architecture contained fewer trainable parameters, reducing computational complexity during training while preserving temporal sequence modelling capability.
+
+\subsection{CNN-Transformer}
+
+The Transformer model uses an attention mechanism instead of recurrent connections. We also extract,
+
+\[
+h^{(s)} = CNN(X_{i,t-L:t}).
+\]
+Combine them with  self-attention mechanism that computes :
+
+\[
+\text{Attention}(Q,K,V) = \text{softmax} \left( \frac{QK^T}{\sqrt{d_k}} \right) V,
+\]
+where:
+\begin{itemize}
+	\item $Q$, $K$, and $V$ are query, key, and value matrices derived from $h^{(s)}$,
+	\item $d_k$ is the dimension scaling factor.
+\end{itemize}
+For the CNN-Transformer architecture, attention heads, embedding dimensions, and dropout rates were adjusted experimentally during model development. Validation loss was monitored throughout training to evaluate learning stability. Due to the moderate temporal depth of the county-level malaria dataset, increasing attention complexity beyond certain levels did not consistently improve predictive performance\cite{Vaswani2017}.
+The final prediction is:
+
+\[
+\hat{I}_{it} = g(Transformer(h^{(s)})).
+\]
+
+\section{Training the model and Validating}
+
+\subsection{Training Objective}
+
+Several performance measures were evaluated on the training, validation, and test datasets across all indices. All models are trained to minimize prediction error. The primary loss function is Mean Squared Error (MSE):
+
+\[
+MSE = \frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2.
+\]
+
+MSE penalizes large errors more heavily than small ones \cite{Hastie2009} . It is important for malaria prediction because large errors could mean missing an outbreak.
+
+\subsection{Optimization}
+
+Model parameters are estimated using gradient-based optimization. For deep learning models, we use the Adam optimizer \cite{Goodfellow-et-al-2016} . The update rule is:
+
+\[
+\theta_{t+1} = \theta_t - \eta \nabla_{\theta} \mathcal{L},
+\]
+where:
+\begin{itemize}
+	\item $\theta$ represents model parameters,
+	\item $\eta$ is the learning rate,
+	\item $\nabla_{\theta} \mathcal{L}$ is the gradient of the loss function.
+\end{itemize}
+
+
+\subsection{Preventing Overfitting}
+
+Overfitting happens when a model memorizes noise instead of learning general patterns \cite{Hastie2009}. We use several techniques to prevent this:
+
+\begin{itemize}
+	\item Dropout in deep learning models: random neurons are turned off during training \cite{Goodfellow-et-al-2016}.
+	\item Early stopping: training stops when validation error stops improving.
+	\item Regularization in XGBoost: the \(\gamma\) and \(\lambda\) parameters penalize complex trees \cite{Syafei2023}.
+\end{itemize}
+
+\subsection{Hyperparameter Tuning}
+Model performance depends on the choice of hyperparameters. These include:
+
+\begin{itemize}
+	\item Number of trees (Random Forest),
+	\item Learning rate and depth (XGBoost),
+	\item Number of layers and units (LSTM/GRU),
+	\item Kernel size and filters (CNN),
+	\item Number of attention heads (Transformer).
+\end{itemize}
+
+Hyperparameters are tuned using grid search and random search methods based on validation performance. For DL architectures, validation loss curves and early stopping criteria were monitored during training to assess convergence behaviour and reduce overfitting. Model training was performed using TensorFlow and Keras implementations in Python. Selection of the final hyperparameters was guided by validation results, robustness of model performance, and effectiveness in handling unseen observations.
+
+\subsection{Model Explainability with SHAP}
+\label{sec:shap_analysis}
+
+Although the developed predictive models achieved strong forecasting performance, their nonlinear and complex architectures limit direct interpretability. To improve understanding of model behavior and variable contributions, SHAP (SHapley Additive Explanations) was used as a model interpretability framework for the hybrid CNN-LSTM model.
+
+SHAP is derived from cooperative game theory and estimates the contribution of each predictor variable toward model output. For a model \(f\) with feature set \(F\), the Shapley value for feature \(k\) is defined as:
+
+\[
+\phi_k = \sum_{S \subseteq F \setminus \{k\}}
+\frac{|S|!(|F|-|S|-1)!}{|F|!}
+\left[
+f(S \cup \{k\}) - f(S)
+\right],
+\]
+
+where:
+\begin{itemize}
+	\item \(F\) represents the full set of predictor variables,
+	\item \(S\) represents a subset of features excluding feature \(k\),
+	\item \(\phi_k\) represents the marginal contribution of feature \(k\).
+\end{itemize}
+
+SHAP explanations follow an additive formulation expressed as:
+
+\[
+f(x) = \phi_0 + \sum_{k=1}^{p} \phi_k,
+\]
+
+where:
+\begin{itemize}
+	\item \(\phi_0\) is the baseline model prediction,
+	\item \(\phi_k\) represents the contribution of predictor \(k\).
+\end{itemize}
+We implemented SHAP KernelExplainer to estimate predictor contributions for the hybrid CNN-LSTM architecture. Kernel SHAP approximates local feature importance using perturbation-based explanations while preserving additive feature attribution properties.
+Kernel SHAP was selected because the final framework included hybrid deep learning architectures that are not directly supported by TreeSHAP, which is primarily designed for tree-based models. In addition, Kernel SHAP provides model-agnostic feature attribution, allowing consistent interpretation across both machine learning and hybrid deep learning models.
+
+SHAP values provide interpretable information regarding model behavior:
+\begin{itemize}
+	\item \(\phi_k > 0\): the feature increases predicted malaria risk,
+	\item \(\phi_k < 0\): the feature decreases predicted malaria risk,
+	\item larger absolute SHAP values indicate stronger predictor influence.
+\end{itemize}
+
+The SHAP framework was applied to quantify the relative contribution of climatic, environmental, demographic, intervention, and engineered temporal features toward malaria incidence prediction across Kenyan counties.
+
+
+
+\section{Model Diagnostics}
+
+After training, the models were evaluated to determine whether they learned meaningful malaria transmission patterns and generalized well to unseen data. Good predictive performance on the training data alone is not sufficient because models may still fail when applied to future observations. Therefore, diagnostic analysis was performed to assess prediction errors, overfitting behaviour, and temporal stability across different transmission periods.
+
+\subsection{Residual Analysis}
+
+Residuals represent the differences between observed and predicted malaria incidence values:
+
+\[
+e_i = y_i - \hat{y}_i,
+\]
+
+where \(y_i\) denotes the observed malaria incidence and \(\hat{y}_i\) represents the predicted value. For a well-performing model, residuals should be randomly distributed around zero without systematic patterns \cite{Hastie2009}. Systematic residual patterns may indicate that important nonlinear relationships or temporal dependencies were not fully captured by the model.
+
+Residual distributions were further examined across different malaria transmission periods, including both low-transmission seasons and outbreak periods. This helped assess whether prediction errors remained stable under changing transmission intensity. Temporal clustering in residuals may suggest remaining temporal autocorrelation, indicating that some delayed transmission behaviour or abrupt outbreak dynamics were not fully learned by the model. Residual plots for all evaluated models are presented and discussed in \hyperref[ch:results]{Chapter 4}.
+
+\subsection{Overfitting Check}
+
+To evaluate model generalization, training and testing prediction errors were compared using the Root Mean Squared Error (RMSE):
+
+\[
+\text{Overfitting Gap} = |RMSE_{\text{test}} - RMSE_{\text{train}}|.
+\]
+
+Smaller differences between training and testing errors indicate better model generalization capability, while a large positive gap suggests that the model memorized training patterns instead of learning generalized malaria transmission relationships \cite{Hastie2009}. Overfitting assessment was particularly important for the hybrid deep learning architectures because models with large numbers of trainable parameters may become sensitive to noise within temporal malaria sequences. The comparative overfitting results are presented in \hyperref[ch:results]{Chapter 4}.
+
+\subsection{Temporal Stability}
+
+Given the time-series nature of malaria transmission, model stability across different time periods was also evaluated. A reliable forecasting model should maintain relatively stable prediction behaviour across seasonal changes and outbreak fluctuations.
+
+where \(\hat{y}_{t}\) denote the predicted malaria incidence at time \(t\). Temporal stability was assessed using:
+
+\[
+\Delta_t = |\hat{y}_{t} - \hat{y}_{t-1}|.
+\]
+
+Large fluctuations between successive predictions may indicate unstable learning behaviour or excessive sensitivity to short-term climatic variability. Temporal stability analysis was therefore used to assess whether the models consistently captured seasonal malaria dynamics and outbreak transitions across counties over time.
+
+
+\section{Evaluation Metrics}
+\label{sec:evaluation_metrics}
+
+We used several evaluation metrics to assess the predictive performance of the developed malaria prediction models. We selected the metrics to measure prediction accuracy, error magnitude, and the ability of the models to explain variations in malaria incidence across counties. Using multiple evaluation metrics provided a more reliable comparison between the machine learning and hybrid deep learning models.
+
+\subsection{Mean Absolute Error (MAE)}
+
+\[
+MAE = \frac{1}{n} \sum_{i=1}^{n} |y_i - \hat{y}_i|.
+\]
+MAE measures the average absolute difference between observed and predicted malaria incidence values in the same units as the outcome variable (cases per 1,000 population). It provides an easily interpretable measure of prediction error and is less sensitive to extreme values compared to RMSE \cite{Ly2025Forecasting}.
+
+\subsection{Root Mean Squared Error (RMSE)}
+
+\[
+RMSE = \sqrt{\frac{1}{n} \sum_{i=1}^{n} (y_i - \hat{y}_i)^2}.
+\]
+
+RMSE penalizes large errors more than MAE does. This is useful because large prediction errors are costly in public health \cite{Ly2025Forecasting}.
+
+\subsection{Coefficient of Determination (\(R^2\))}
+
+\[
+R^2 = 1 - \frac{\sum_{i=1}^{n} (y_i - \hat{y}_i)^2}{\sum_{i=1}^{n} (y_i - \bar{y})^2},
+\]
+where:
+\begin{itemize}
+	\item $y_i$ represents the observed malaria incidence value,
+	\item $\hat{y}_i$ represents the predicted malaria incidence value,
+	\item $\bar{y}$ represents the mean observed malaria incidence,
+	\item $n$ represents the total number of observations.
+\end{itemize}
+\(R^2\) measures how much of the variation in malaria incidence is explained by the model. Values close to 1 indicate good explanatory power.
+
+\section{Risk Mapping}
+\label{sec:risk_mapping}
+
+
+
+The final step is turning predictions into maps. Maps help public health officials  to know exactly when and where risk are high and plan interventions \cite{amek2012spatial}.
+\subsection{Prediction of Malaria Incidence}
+
+Using the trained models, predicted malaria incidence is obtained for each county $i$ at time $t$:
+
+\[
+\hat{I}_{it} = f(X_{it}).
+\]
+
+These predicted values represent the estimated malaria burden after accounting for climatic, environmental, demographic, and intervention-related factors.
+\subsection{Spatial Integration and Mapping}
+\label{sec:spatial_mapping}
+
+
+After generating malaria predictions from the machine learning models, the predicted values were linked with Kenya county boundary shapefiles to enable spatial visualization of malaria risk.
+
+County boundary shapefiles and GeoJSON spatial files were imported into R using the \texttt{sf} package. The spatial dataset contained all 47 counties represented as MULTIPOLYGON geometries.
+
+Before merging prediction outputs with spatial polygons, county names were standardized to ensure correct matching between the prediction dataset and shapefiles. Some county names required harmonization due to naming inconsistencies. Examples included:
+
+\begin{itemize}
+	\item Keiyo Marakwet changed to Elgeyo Marakwet,
+	\item Tharaka changed to Tharaka Nithi,
+\end{itemize}
+
+County-level malaria predictions generated from Random Forest, XGBoost models were aggregated by computing average predicted malaria incidence across the testing period. The aggregated prediction outputs were then merged with county polygons using county identifiers. Spatial joins and geometry processing were implemented using the \texttt{sf} and \texttt{dplyr} packages in R.
+
+Geometry validation and coordinate reference system consistency was checked during spatial integration to ensure proper alignment between county boundary shapefiles and malaria prediction outputs before map visualization.
+
+
+Choropleth malaria risk maps were generated using the \texttt{ggplot2} and \texttt{tmap} libraries. The maps displayed county-level malaria risk using color gradients, where darker colors represented higher malaria risk levels.
+
+The generated outputs included:
+\begin{itemize}
+	\item observed malaria incidence maps,
+	\item XGBoost prediction maps,
+	\item hotspot classification maps,
+	\item GeoJSON spatial outputs.
+\end{itemize}
+
+
+\subsection{Risk Categories}
+Predicted malaria incidence values were first mapped as continuous risk estimates. To facilitate interpretation and hotspot identification, the predicted values were subsequently classified into three risk categories using tercile thresholds derived from the distribution of predicted malaria risk values:
+
+\begin{itemize}
+	\item \textbf{Low Risk:} below the 33rd percentile,
+	\item \textbf{Moderate Risk:} 33rd--66th percentile,
+	\item \textbf{High Risk:} above the 66th percentile.
+\end{itemize}
+
+Counties classified within the \textbf{High Risk} category were considered malaria hotspots. The classification was intended to support visualization and intervention prioritization rather than define epidemiological transmission thresholds. This percentile-based approach enables a balanced representation of counties across risk groups while facilitating comparison of relative malaria risk patterns across Kenya.
+\section{Reproducibility Workflow}
+
+The study workflow consisted of six main stages:
+
+\begin{enumerate}
+	\item Climatic, environmental, demographic, intervention, and malaria incidence data were collected and integrated into a county-level panel dataset.
+	
+	\item The dataset was preprocessed through data cleaning, lag feature generation, feature engineering, temporal splitting, and feature scaling.
+	
+	\item Baseline machine learning models (Random Forest and XGBoost) and hybrid deep learning models (CNN-LSTM, CNN-GRU, and CNN-Transformer) were developed for malaria prediction.
+	
+	\item The models were trained, validated, and evaluated using RMSE, MAE, and $R^2$ performance metrics.
+	
+	\item SHAP analysis was conducted to examine the contribution of predictor variables to malaria risk predictions.
+	
+	\item County-level prediction outputs were combined with spatial shapefiles to generate malaria risk maps and hotspot visualizations.
+\end{enumerate}
+
+R was primarily used for data preparation, spatial analysis, and visualization on ML, while Python was used for implementing the hybrid deep learning models and conducting temporal prediction experiments.
+
+\section{Ethical Considerations}
+
+This study used aggregated county-level malaria and environmental data obtained from publicly available and institutional sources, including CHIRPS, ERA5, MODIS, WorldPop, and Kenya DHIS2. No individual-level or personally identifiable information was accessed during the study.
+
+The following ethical issues were considered during the research:
+
+\begin{itemize}
+	
+	\item \textbf{Data confidentiality:} Since the analysis was performed using aggregated county-level data, no individual patient or household could be identified.
+	
+	\item \textbf{Use of prediction results:} The malaria prediction models and hotspot maps were developed to support surveillance, early warning, and intervention planning. Their outputs should therefore be interpreted together with routine surveillance information and epidemiological evidence.
+	
+	\item \textbf{Decision support:} The generated malaria risk maps are intended to assist public health planning and resource allocation. They should complement, rather than replace, field investigations and expert assessment.
+	
+	\item \textbf{Reproducibility:} Data preparation, model development, validation, and spatial mapping procedures were documented to enable transparency and facilitate future replication of the study.
+	
+\end{itemize}

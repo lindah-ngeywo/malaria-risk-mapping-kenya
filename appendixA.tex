@@ -1,0 +1,119 @@
+\appendix
+
+\chapter{Additional Experimental Results and Model Configuration}
+
+\section{Model Hyperparameters}
+
+\begin{table}[H]
+	\centering
+	\caption{Hyperparameters Used for Baseline Machine Learning and Deep Learning Models}
+	\label{tab:model_hyperparameters}
+	\small
+	\begin{tabular}{p{3cm}p{5cm}p{3cm}}
+		\hline
+		Model & Hyperparameter & Value \\
+		\hline
+		
+		Random Forest & Number of Trees & 200 \\
+	 & mtry & 10 \\
+		 & Node Size & 25 \\
+	 & Maximum Nodes & 30 \\
+		\hline
+		
+		XGBoost & Learning Rate ($\eta$) & 0.01 \\
+		& Maximum Depth & 10 \\
+		 & Subsample & 0.85 \\
+		 & Column Sample by Tree & 0.85 \\
+		 & Early Stopping Rounds & 100 \\
+		 & Optimal Boosting Rounds & 996 \\
+		\hline
+		
+		LSTM & LSTM Units & 64 \\
+		 & Dense Units & 32 \\
+	 & Batch Size & 32 \\
+		 & Maximum Epochs & 150 \\
+		 & Optimizer & Adam \\
+		\hline
+		
+		CNN-LSTM & Convolution Filters & 128 \\
+		 & Kernel Size & 2 \\
+	 & LSTM Units & 128, 64 \\
+	 & Dense Units & 32, 16 \\
+	 & Batch Size & 32 \\
+		& Maximum Epochs & 200 \\
+		 & Dropout Rate & 0.2 \\
+	 & Optimizer & Adam \\
+		\hline
+		
+		CNN-GRU & Convolution Filters & 128 \\
+		 & Kernel Size & 2 \\
+	 & GRU Units & 128, 64 \\
+	 & Dense Units & 32, 16 \\
+	 & Batch Size & 32 \\
+		& Maximum Epochs & 200 \\
+	 & Dropout Rate & 0.2 \\
+	& Optimizer & Adam \\
+		\hline
+		 \hline
+		 
+		 CNN-Transformer & Convolution Filters & 128 \\
+		 & Kernel Size & 2 \\
+		 & Attention Heads & 4 \\
+		 & Key Dimension & 32 \\
+		 & Dense Units & 64, 32 \\
+		 & Batch Size & 32 \\
+		 & Maximum Epochs & 200 \\
+		 & Dropout Rate & 0.2 \\
+		 & Optimizer & Adam \\
+		 & Learning Rate & 0.001 \\
+		 \hline
+	\end{tabular}
+\end{table}
+
+\section{Predictor Variables and Engineered Features}
+
+Baseline machine learning models were trained using climatic, environmental, demographic, intervention, temporal, and lagged predictors. The predictors included rainfall, temperature, humidity, NDVI, population, ITN coverage, IRS coverage, treatment access, month indicators, and climatic lag variables.
+
+A total of 20 predictors were used in the baseline machine learning models:
+\[
+\{\text{rainfall, temperature, humidity, ndvi, population, itn, irs, treatment, month\_num,}
+\]
+\[
+\text{rain\_lag1--3, temp\_lag1--3, hum\_lag1--3, ndvi\_lag1--2}\}
+\]
+
+The hybrid deep learning models further incorporated engineered temporal and interaction-based features to improve spatio-temporal malaria prediction. Additional engineered variables included:
+\begin{itemize}
+	\item cyclical month encoding (\texttt{sin\_m}, \texttt{cos\_m}),
+	\item encoded county identifiers,
+	\item six- and twelve-month incidence lag variables,
+	\item rolling mean statistics,
+	\item rolling standard deviation statistics,
+	\item rainfall-temperature interaction terms,
+	\item rainfall-NDVI interaction terms,
+	\item intervention interaction features.
+\end{itemize}
+
+Overall, the hybrid deep learning models used more than 20 predictors and engineered variables to capture nonlinear temporal and spatial malaria transmission dynamics.
+
+\section{Chronological Data Splitting}
+
+The malaria dataset was divided chronologically to preserve temporal dependency and prevent information leakage during forecasting.
+
+\begin{itemize}
+	\item Training period: April 2016 -- December 2022
+	\item Testing period: January 2023 -- December 2025
+	\item Validation subset: 10\% of training data
+\end{itemize}
+
+\section{Software and Computational Environment}
+
+The analysis was implemented using:
+\begin{itemize}
+	\item Python for deep learning implementation,
+	\item R for machine learning and spatial analysis,
+	\item TensorFlow and Keras for neural network development,
+	\item XGBoost and Random Forest libraries for baseline modelling,
+	\item ggplot2, sf, and tmap for malaria risk mapping,
+	\item SHAP libraries for explainable artificial intelligence analysis.
+\end{itemize}

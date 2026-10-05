@@ -1,0 +1,23 @@
+
+
+\chapter{CONCLUSION AND FUTURE WORK}
+
+\section{Conclusion}
+
+In this study, we developed and evaluated a spatio-temporal malaria prediction framework using climatic, environmental, demographic, intervention, and temporal variables collected across Kenya's 47 counties between 2016 and 2025. We found that malaria transmission varies considerably across both space and time, with higher transmission generally observed around the Lake Victoria basin and in parts of the coastal region.
+
+We also found that rainfall, humidity, vegetation conditions, and lagged environmental effects were important factors associated with malaria transmission. Among the models evaluated, XGBoost achieved the highest overall predictive performance, while CNN-LSTM produced the strongest results among the hybrid deep learning models, achieving an $(R^2)$ value of 0.8096. The generated malaria risk maps and hotspot classifications identified counties with persistently elevated malaria risk, including Kisumu, Homa Bay, Migori, Busia, Lamu, and Taita Taveta.
+
+Overall, we demonstrated that combining machine learning, hybrid deep learning, and spatial analysis can improve malaria risk prediction and provide useful information for malaria surveillance, early warning systems, and targeted intervention planning in Kenya.
+
+\section{Limitations and Future Work}
+\subsection{Limitations}
+We acknowledge several limitations in this study. First, the analysis was conducted at county level and may not fully capture variations in malaria transmission at ward level. Second, some potentially important predictors, including mosquito vector density, detailed human mobility patterns, healthcare accessibility, and socioeconomic conditions, were not included because of limited data availability. Third, although the hybrid deep learning models achieved strong predictive performance, the CNN-Transformer architecture may have been constrained by the available temporal dataset size, since Transformer-based models generally perform better with larger sequential datasets.
+\subsection{Future Directions}
+
+We suggest several areas for future work. To start with, future studies may extend the analysis to ward level and conduct finer spatial analysis. Secondly, additional variables related to healthcare access, population movement, and socioeconomic conditions may be incorporated to better capture malaria transmission dynamics. Finally, larger longitudinal datasets and more advanced hybrid deep learning architectures may be explored to further improve predictive performance and temporal learning capability.
+
+
+
+
+

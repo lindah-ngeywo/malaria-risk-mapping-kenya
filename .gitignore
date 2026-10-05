@@ -1,0 +1,74 @@
+# LaTeX temporary files
+*.aux
+*.log
+*.out
+*.toc
+*.bbl
+*.blg
+*.synctex.gz
+*.fls
+*.fdb_latexmk
+*.lof
+*.lot
+
+# R files
+.Rhistory
+.RData
+.Rproj.user/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# Research data
+*.csv
+*.xlsx
+*.xls
+*.sav
+*.dta
+
+# Jupyter temporary files
+.ipynb_checkpoints/
+
+# Office temporary/lock files
+.~lock.*
+
+# Credentials and secrets
+.env
+.env.*
+*.pem
+*.key
+
+# GIS and geographic data
+*.geojson
+*.shp
+*.shx
+*.dbf
+*.sbn
+*.sbx
+*.prj
+*.cpg
+*.xml
+
+# Graph/network data
+*.graph
+*.adj
+
+# Large R/Python data objects
+*.rds
+*.RData
+*.parquet
+
+# Personal files
+Figures/
+
+# Unrelated projects and templates
+Bootcamp/
+FrenchTemplate/
+OtherLanguages/
+
+# Errata files
+Errata/
+Errata.tex

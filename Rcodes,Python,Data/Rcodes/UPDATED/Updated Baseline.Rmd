@@ -1,0 +1,985 @@
+---
+title: "Machine Learning Baseline Models"
+author: "Lindah"
+date: "`r Sys.Date()`"
+output:
+  pdf_document:
+    toc: true
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    number_sections: true
+subtitle: Random Forest | XGBoost | Malaria Risk Prediction Kenya
+---
+
+```{r setup, include=FALSE}
+options(OutDec = ".", 
+        encoding = "UTF-8",
+        cli.unicode = FALSE)
+
+knitr::opts_chunk$set(echo=TRUE, 
+                      message=FALSE, 
+                      warning=FALSE,
+                      fig.width=10, 
+                      fig.height=6,
+                      fig.show = 'hold')
+```
+
+
+#  Loading the Libraries
+
+```{r }
+library(dplyr)        
+library(readr)        
+library(lubridate)    
+library(ggplot2)      
+library(tidyr)        
+library(patchwork)    
+library(randomForest) 
+library(xgboost)      
+library(e1071)        
+library(caret)        
+library(Metrics)      
+library(kableExtra)   
+
+# Setting clean latex 
+theme_set(theme_bw())
+```
+
+
+# Loading Data
+
+```{r }
+DATA <- "/home/student25/Documents/THESIS/MSC_THESIS_package_corrected - Revised/SPATIO-TEMPORAL THESIS/DATA/"
+
+panel  <- read_csv(paste0(DATA, "kenya_Malaria_panel.csv"))
+static <- read_csv(paste0(DATA, "county_static_features.csv"))
+
+response_label <- "Incidence per 1000"
+
+cat("Panel rows:", nrow(panel), " - Counties:", n_distinct(panel$county), "\n")
+```
+
+
+# Cleaning and converting Data
+# Convert all columns to correct types THAT IS  DATE AND CONTY
+```{r }
+
+panel <- panel %>%
+  mutate(
+    date               = ymd(date),
+    year               = year(date),
+    month              = month(date),
+    county             = toupper(trimws(county)),
+    incidence_per_1000 = as.numeric(incidence_per_1000),
+    rainfall           = as.numeric(rainfall),
+    temperature        = as.numeric(temperature),
+    humidity           = as.numeric(humidity),
+    ndvi               = as.numeric(ndvi),
+    population         = as.numeric(population),
+    itn                = as.numeric(itn),
+    irs                = as.numeric(irs),
+    treatment          = as.numeric(treatment)
+  )
+
+clean_label <- "Incidence per 1000"
+
+cat(" Total missing values:", sum(is.na(panel)), "\n")
+```
+
+
+
+# Adding Lag Features since mosquito development and breeding depends on environmental effects.
+#  Malaria responds to climate 1-3 months later
+```{r }
+panel <- panel %>%
+  arrange(county, date) %>%
+  group_by(county) %>%           
+  mutate(
+    # Rainfall lags establishes Breeding pools and larvae development
+    rain_lag1 = lag(rainfall,    1),
+    rain_lag2 = lag(rainfall,    2),
+    rain_lag3 = lag(rainfall,    3),
+    # Temperature lags helps Parasite development 
+    temp_lag1 = lag(temperature, 1),
+    temp_lag2 = lag(temperature, 2),
+    temp_lag3 = lag(temperature, 3),
+    
+
+# Humidity lags provide Adult mosquito survival rates
+    hum_lag1  = lag(humidity,    1),
+    hum_lag2  = lag(humidity,    2),
+    hum_lag3  = lag(humidity,    3),
+# NDVI lags promotes Vegetation and moisture habitat
+    ndvi_lag1 = lag(ndvi,        1),
+    ndvi_lag2 = lag(ndvi,        2),
+    month_num = as.integer(month(date))
+  ) %>%
+  ungroup() %>%
+  drop_na()  
+
+cat("complete. Rows:", nrow(panel), " - Missing values:", sum(is.na(panel)), "\n")
+```
+
+
+
+#  Train and Test  data Splitting 
+
+```{r }
+
+train <- panel %>% filter(year <= 2022)
+test  <- panel %>% filter(year >= 2023)
+
+# Cleaned output using standard characters for the console
+cat("Train rows:", nrow(train), " - From:", format(min(train$date)), "to", format(max(train$date)), "\n")
+cat("Test rows:", nrow(test), " - From:", format(min(test$date)), "to", format(max(test$date)), "\n")
+```
+
+
+
+# Defining Features and Scaling
+
+
+```{r }
+# Predictor columns for standard set for all two models
+pred_cols <- c(
+  "rainfall", "temperature", "humidity", "ndvi",
+  "itn", "irs", "treatment",
+  "rain_lag1", "rain_lag2", "rain_lag3",
+  "temp_lag1", "temp_lag2", "temp_lag3",
+  "hum_lag1",  "hum_lag2",  "hum_lag3",
+  "ndvi_lag1", "ndvi_lag2",
+  "month_num", "population"
+)
+
+# Compute mean and SD from TRAINING data 
+tr_mean <- sapply(pred_cols, function(v) mean(train[[v]], na.rm=TRUE))
+tr_sd   <- sapply(pred_cols, function(v) sd(train[[v]],   na.rm=TRUE))
+
+# Function to apply scaling
+scale_df <- function(df) {
+  for (v in pred_cols) df[[v]] <- (df[[v]] - tr_mean[v]) / tr_sd[v]
+  return(df)
+}
+
+train_s <- scale_df(train)
+test_s  <- scale_df(test)
+
+# Feature matrices
+X_tr <- as.matrix(train_s[, pred_cols])
+X_te <- as.matrix(test_s[, pred_cols])
+
+# Response variable 
+Y_tr <- train_s$incidence_per_1000
+Y_te <- test_s$incidence_per_1000
+
+# Cleaned output
+cat("Features:", length(pred_cols), " - X_tr dimensions:", nrow(X_tr), "by", ncol(X_tr), "\n")
+```
+
+
+
+# FEATURE CORRELATION HEATMAP
+
+
+```{r}
+
+
+library(corrplot)
+
+corr_matrix <- cor(train[, pred_cols])
+
+corrplot(
+  corr_matrix,
+  method = "color",
+  type = "upper",
+  tl.cex = 0.7,
+  number.cex = 0.5
+)
+```
+
+# Evaluation Function
+
+```{r }
+evaluate <- function(obs, pred, label = "") {
+  r   <- rmse(obs, pred)
+  m   <- mae(obs, pred)
+  r2  <- 1 - sum((obs - pred)^2) / sum((obs - mean(obs))^2)
+  
+  # 75th percentile threshold
+  thr <- quantile(obs, .75, na.rm = TRUE)  
+  tp  <- sum(obs >= thr & pred >= thr)
+  tn  <- sum(obs <  thr & pred <  thr)
+  fp  <- sum(obs <  thr & pred >= thr)
+  fn  <- sum(obs >= thr & pred <  thr)
+  acc <- (tp + tn) / (tp + tn + fp + fn)
+  
+  # CLEANED 
+  if (nchar(label) > 0) {
+    cat(sprintf("[%s] RMSE=%7.5f MAE=%7.5f R2=%6.4f Acc=%6.4f\n",
+                label, r, m, r2, acc))
+  }
+  
+  # Data frame output 
+  data.frame(Model=label, 
+             RMSE=round(r,5), 
+             MAE=round(m,5),
+             R2=round(r2,4), 
+             Accuracy=round(acc,4))
+}
+```
+
+
+# Random Forest
+
+```{r rf}
+set.seed(123)
+
+# Tune mtry to find best number of features tried at each split
+oob <- sapply(c(3, 5, 7, 10), function(m)
+  randomForest(X_tr, Y_tr, ntree=100, mtry=m, nodesize=20)$mse[100])
+
+best_m <- c(3, 5, 7, 10)[which.min(oob)]
+cat("Best mtry:", best_m, "\n")
+
+# Fit  Random Forest
+rf_fit <- randomForest(
+  X_tr, Y_tr,
+  ntree      = 200,      
+  mtry       = best_m,   
+  nodesize   = 25,       
+  maxnodes   = 30,       
+  importance = TRUE      
+)
+
+# Predictions
+rf_te <- evaluate(Y_te, predict(rf_fit, X_te), "RF-Test")
+rf_tr <- evaluate(Y_tr, predict(rf_fit, X_tr), "RF-Train")
+
+# Store predictions 
+test_s$rf_pred <- predict(rf_fit, X_te)
+```
+# IncMSE tells  how much error rises when this feature is randomly shuffled
+```{r }
+importance(rf_fit) %>%
+  as.data.frame() %>%
+  tibble::rownames_to_column("Feature") %>%
+  arrange(desc(`%IncMSE`)) %>%
+  head(15) %>%
+  ggplot(aes(reorder(Feature, `%IncMSE`), `%IncMSE`, fill = `%IncMSE`)) +
+  geom_col(width = 0.7) +
+  coord_flip() +
+  scale_fill_gradient(low = "lightblue", high = "lightblue4") +
+  labs(title = "Random Forest - Variable Importance (Top 15)",
+       x = NULL, 
+       y = "Percentage Increase in MSE") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+```
+
+
+#  XGBoost
+
+```{r xgb}
+# Convert to DMatrix format
+dtrain <- xgb.DMatrix(X_tr, label = Y_tr)
+dtest  <- xgb.DMatrix(X_te, label = Y_te)
+
+# Model parameters
+xgb_p <- list(
+  objective        = "reg:squarederror",
+  eta              = 0.01,    
+  max_depth        = 10,
+  subsample        = 0.85,
+  colsample_bytree = 0.85,
+  min_child_weight = 1,
+  gamma            = 0,
+  alpha            = 0,
+  lambda           = 1
+)
+
+# 5-fold cross-validation
+set.seed(42)
+cv <- xgb.cv(
+  params                = xgb_p,
+  data                  = dtrain,
+  nrounds               = 1000,
+  nfold                 = 5,
+  metrics               = "rmse",
+  early_stopping_rounds = 100,
+  verbose               = FALSE,
+  print_every_n         = 500
+)
+
+# Safe extraction of best iteration
+best_nrounds <- if (!is.null(cv$best_iteration) && cv$best_iteration > 0) {
+  cv$best_iteration 
+} else {
+  which.min(cv$evaluation_log$test_rmse_mean)
+}
+
+# Clean output for console
+cat("Best boosting rounds found:", best_nrounds, "\n")
+```
+
+```{r }
+# Confirming colomns if they exist
+if (is.null(colnames(X_tr))) {
+  colnames(X_tr) <- pred_cols
+}
+
+# Re-creating dtrain matrix
+dtrain <- xgb.DMatrix(X_tr, label = Y_tr)
+dtest  <- xgb.DMatrix(X_te, label = Y_te)
+
+# Final model training
+xgb_fit <- xgb.train(params = xgb_p, 
+                     data = dtrain, 
+                     nrounds = best_nrounds, 
+                     verbose = 0)
+
+# Predictions and Evaluation
+xgb_te_results <- evaluate(Y_te, predict(xgb_fit, dtest),  "XGB-Test")
+xgb_tr_results <- evaluate(Y_tr, predict(xgb_fit, dtrain), "XGB-Train")
+
+# Store test predictions
+test_s$xgb_pred <- predict(xgb_fit, dtest)
+```
+# Gain to improvement in accuracy from this feature in splits
+```{r }
+
+xgb.importance(feature_names = colnames(X_tr), model = xgb_fit) %>%
+  head(15) %>%
+  ggplot(aes(reorder(Feature, Gain), Gain, fill = Gain)) +
+  geom_col(width = 0.7) +
+  coord_flip() +
+  scale_fill_gradient(low = "orange", high = "red") +
+  labs(title = "XGBoost - Feature Importance (Top 15)", 
+       x = NULL, 
+       y = "Gain (Contribution to Accuracy)") +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+```
+
+Interpretation:By analyzing feature importance, I found that population and rainfall are the most significant predictors of malaria risk in the XGBoost model. In the Random Forest model, rainfall and population also showed the highest percentage increase in Mean Squared Error (MSE) when shuffled, confirming their critical role. Interestingly, climate factors like humidity and NDVI (vegetation index) also contributed significantly, often with lagged effects of 1 to 3 months.
+
+
+
+# Final Model Comparison
+
+```{r }
+# Combining all test results
+final <- do.call(rbind, list(rf_te, xgb_te_results)) %>%
+  arrange(RMSE) %>%
+  mutate(Rank = row_number())
+
+# Cleaned console 
+cat("\n FINAL MODEL COMPARISON \n")
+print(final[, c("Rank","Model","RMSE","MAE","R2","Accuracy")], row.names=FALSE)
+final %>%
+  kbl(caption = "ML Model Performance - Test Period (2023-2025) - Response: Incidence per 1000",
+      align   = "clcccc",
+      booktabs = TRUE) %>% 
+  kable_styling(latex_options = c("striped", "hold_position"), full_width = FALSE) %>%
+  
+  row_spec(1, bold=TRUE, background = "green", color = "white") %>%  
+  row_spec(nrow(final), background = "gray!20") %>%
+  footnote(general = "Test period: Jan 2023 to Dec 2025 - 47 counties")
+```
+
+Interpretation:I compared three machine learning models that is XGBoost and Random Forest to predict malaria incidence. Based on the Root Mean Square Error (RMSE), XGBoost emerged as the top performing model with an RMSE of 0.00863. It also achieved the highest $R^2$ of 0.8199, indicating it explains approximately 82% of the variance in the test data. Random Forest followed in second place ($R^2 = 0.7718$).
+
+# TEMPORAL FORECAST COMPARISON
+
+```{r}
+
+
+monthly_compare <- test_s %>%
+  group_by(date) %>%
+  summarise(
+    Observed = mean(incidence_per_1000),
+    RF = mean(rf_pred),
+    XGB = mean(xgb_pred),
+  ) %>%
+  pivot_longer(-date,
+               names_to = "Series",
+               values_to = "Incidence")
+
+ggplot(monthly_compare,
+       aes(x = date,
+           y = Incidence,
+           color = Series)) +
+
+  geom_line(linewidth = 1) +
+
+  labs(
+    title = "Monthly Malaria Forecast Trends",
+    subtitle = "Observed vs Predicted Incidence",
+    x = "Date",
+    y = "Incidence per 1,000"
+  ) +
+
+  theme_bw(base_size = 12)
+
+```
+
+
+# COUNTY-LEVEL FORECASTS
+
+```{r}
+
+
+focus_counties <- c(
+  "KISUMU",
+  "BUSIA",
+  "KAKAMEGA",
+  "ELGEYO MARAKWET"
+)
+
+county_plot <- test_s %>%
+  filter(county %in% focus_counties)
+
+ggplot(county_plot,
+       aes(x = date)) +
+
+  geom_line(aes(y = incidence_per_1000,
+                color = "Observed"),
+            linewidth = 1) +
+
+  geom_line(aes(y = xgb_pred,
+                color = "XGBoost"),
+            linewidth = 1) +
+
+  facet_wrap(~county,
+             scales = "free_y") +
+
+  labs(
+    title = "County-Level Malaria Forecasts",
+    x = "Date",
+    y = "Incidence per 1,000",
+    color = "Series"
+  ) +
+
+  theme_bw(base_size = 11)
+```
+
+```{r }
+mc <- c("RF-Test" = "forestgreen", 
+        "XGB-Test" = "red3" 
+    )
+
+mk2 <- function(df, col, ttl, lo = TRUE) {
+  df %>%
+    ggplot(aes(reorder(Model, if(lo) -.data[[col]] else .data[[col]]),
+               .data[[col]], fill = Model)) +
+    geom_col(width = 0.7) +
+    geom_text(aes(label = round(.data[[col]], 4)),
+              hjust = -0.1, size = 3) +
+    coord_flip() +
+    scale_fill_manual(values = mc) +
+    scale_y_continuous(expand = expansion(mult = c(0, 0.25))) +
+    # Removed arrows from the title variable
+    labs(title = ttl, x = NULL, y = col) +
+    theme_minimal(base_size = 10) +
+    theme(legend.position = "none",
+          # Ensure text is standard 
+          text = element_text(family = "sans"))
+}
+
+# CLEANING TITLES
+p1 <- mk2(final, "RMSE", "RMSE (Lower is better)")
+p2 <- mk2(final, "R2",   "R2 (Higher is better)", FALSE)
+p3 <- mk2(final, "MAE",  "MAE (Lower is better)")
+p4 <- mk2(final, "Accuracy", "Hotspot Accuracy", FALSE)
+
+# Combining using patchwork
+(p1 + p2) / (p3 + p4) +
+  plot_annotation(
+    title    = "Machine Learning Model Comparison",
+    subtitle = "Test period: 2023-2025 - Response: Incidence per 1000",
+    theme    = theme(plot.title = element_text(face = "bold", size = 13))
+  )
+ggsave(" Baseline Machine learning metrics.png", width = 5, height = 4, dpi = 300)
+```
+
+
+#  Train vs Test $R^2$ 
+
+```{r }
+comparison_data <- data.frame(
+  Model   = rep(c("XGBoost","Random Forest"), each = 2),
+  Set     = rep(c("Train","Test"), 2),
+  R2      = c(xgb_tr_results$R2, xgb_te_results$R2,
+              rf_tr$R2,          rf_te$R2
+              )
+)
+
+ggplot(comparison_data, aes(x = Model, y = R2, fill = Set)) +
+  geom_bar(stat = "identity", position = "dodge", color = "black") +
+  geom_text(aes(label = round(R2, 3)), 
+            position = position_dodge(0.9), vjust = -0.4, size = 3.5) +
+ 
+  scale_fill_manual(values = c("Train" = "forestgreen", "Test" = "purple")) +
+  # CLEANED
+  labs(title    = "Train vs Test R2 - Overfitting Diagnostic",
+       subtitle = "A large gap between bars indicates potential overfitting",
+       x = NULL, 
+       y = "R-squared (R2)", 
+       fill = "Dataset") +
+  theme_bw(base_size = 12)
+ggsave("Training vs Testing diagnostic of ML.png", width = 5, height = 4, dpi = 300)
+```
+
+Interpretation:I evaluated the gap between training and testing performance to check for overfitting. The XGBoost model showed a very high training $R^{2}$ of 0.9995 compared to its test $R^{2}$ of 0.8202. While this large gap suggests high model complexity, it still maintains the best predictive power on the unseen test set. Random Forest and SVR showed more balanced performance between sets, but with lower overall accuracy on the test data.  
+#  Observed vs Predicted — All Models
+```{r}
+# Join risk_class then reshape to long format for facet plot
+static_clean <- static %>%
+  mutate(county_join = toupper(trimws(county))) %>%
+  select(county_join, risk_class) %>%
+  distinct(county_join, .keep_all = TRUE)
+
+plot_ready <- test_s %>%
+  mutate(county_join = toupper(trimws(as.character(county)))) %>%
+  left_join(static_clean, by = "county_join") %>%
+  mutate(risk_class = ifelse(is.na(risk_class), "Unknown", risk_class)) %>%
+ 
+  pivot_longer(cols = c(rf_pred, xgb_pred),
+               names_to  = "Model_Type",
+               values_to = "Predicted_Val") %>%
+  mutate(Model_Name = factor(
+    recode(Model_Type,
+           "xgb_pred" = "Rank 1: XGBoost",
+           "rf_pred"  = "Rank 2: Random Forest"),
+    levels = c("Rank 1: XGBoost","Rank 2: Random Forest")
+  ))
+
+# Mapping the observed variable to a name without underscores for the plot object
+ggplot(plot_ready, aes(x = incidence_per_1000, y = Predicted_Val)) +
+  geom_abline(slope=1, intercept=0, linetype="dashed", color="black", linewidth=1) +
+  geom_smooth(method="lm", color="purple", se=FALSE, linewidth=1.2) +
+  geom_point(aes(fill = risk_class), shape=21, color="black",
+             alpha=1, size=1.8, stroke=0.3) +
+  facet_wrap(~Model_Name) +
+  # Using universal color names
+  scale_fill_manual(values = c("Low"      = "forestgreen",
+                                "Moderate" = "gold",
+                                "High"      = "red3",
+                                "Unknown"   = "skyblue4")) +
+  labs(title    = "Observed vs Predicted Malaria Incidence",
+       subtitle = "Dashed line = perfect prediction - Purple line = model trend",
+       x    = "Observed Incidence (per 1,000)",
+       y    = "Predicted Incidence (per 1,000)",
+       fill = "Risk Class") +
+  theme_bw(base_size = 13) +
+  theme(legend.position   = "bottom",
+        strip.background  = element_rect(fill = "grey90"),
+        strip.text        = element_text(face = "bold"))
+ggsave( "Observed vs Predicted diagnostic of ML.png", width = 5, height = 4, dpi = 300)
+```
+
+
+\section*{MAPPING AND PREDICTION}
+
+
+```{r}
+library(sf)
+library(dplyr)
+library(ggplot2)
+library(readr)
+library(stringr)
+library(viridis)
+library(tmap)
+
+kenya_map <- st_read("/home/student25/Documents/THESIS/MSC_THESIS_package_corrected - Revised/SPATIO-TEMPORAL THESIS/kenyan-counties/County.shp")
+
+#  LOAD PREDICTIONS
+
+
+pred <- read.csv("/home/student25/Documents/THESIS/MSC_THESIS_package_corrected - Revised/SPATIO-TEMPORAL THESIS/Rcodes/UPDATED/baseline_predictions.csv")
+
+head(pred)
+
+
+
+
+#  LOAD COUNTY SHAPEFILE
+kenya_map <- st_read("/home/student25/Documents/THESIS/MSC_THESIS_package_corrected - Revised/SPATIO-TEMPORAL THESIS/kenyan-counties/County.shp")
+
+print(names(kenya_map))
+
+
+```
+```{r}
+county_col <- "COUNTY"
+```
+
+
+# CLEAN COUNTY NAMES
+
+```{r}
+
+
+# Function to standardize names
+clean_names <- function(x){
+
+  x <- toupper(trimws(x))
+
+  # Remove extra spaces
+  x <- str_squish(x)
+
+  # FIX SPECIAL COUNTY NAMES
+  x <- str_replace_all(x, "-", " ")
+
+  # FIX ELGEYO MARAKWET
+  x[x %in% c("ELGEYO-MARAKWET",
+             "ELGEYO MARAKWET",
+             "KEIYO MARAKWET")] <- "ELGEYO MARAKWET"
+
+  # FIX THARAKA NITHI
+  x[x %in% c("THARAKA",
+             "THARAKA-NITHI",
+             "THARAKA NITHI")] <- "THARAKA NITHI"
+
+  # FIX TRANS NZOIA
+  x[x %in% c("TRANSNZOIA",
+             "TRANS NZOIA")] <- "TRANS NZOIA"
+
+  # FIX TAITA TAVETA
+  x[x %in% c("TAITA-TAVETA",
+             "TAITA TAVETA")] <- "TAITA TAVETA"
+
+  return(x)
+}
+
+# Apply cleaning
+kenya_map$county_join <- clean_names(kenya_map[[county_col]])
+
+pred$county_join <- clean_names(pred$county)
+
+```
+
+#  CHECKING COUNTY MATCHING
+
+
+```{r}
+
+# Counties in predictions but not shapefile
+missing_in_map <- setdiff(unique(pred$county_join),
+                          unique(kenya_map$county_join))
+
+print("Missing in shapefile:")
+print(missing_in_map)
+
+# Counties in shapefile but not predictions
+missing_in_pred <- setdiff(unique(kenya_map$county_join),
+                           unique(pred$county_join))
+
+print("Missing in predictions:")
+print(missing_in_pred)
+```
+
+#  AGGREGATE PREDICTIONS
+
+```{r}
+
+
+# Average predictions across test period
+
+map_pred <- pred %>%
+  group_by(county_join) %>%
+  summarise(
+    observed = mean(obs, na.rm = TRUE),
+    rf_pred = mean(RF, na.rm = TRUE),
+    xgb_pred = mean(XGBoost, na.rm = TRUE)
+    
+  )
+
+head(map_pred)
+
+```
+
+# MERGE WITH SPATIAL DATA
+
+```{r}
+
+
+kenya_map2 <- kenya_map %>%
+  left_join(map_pred, by = "county_join")
+
+```
+
+
+#  CHECK FOR FAILED MERGES
+
+
+```{r}
+
+failed <- kenya_map2 %>%
+  filter(is.na(xgb_pred)) %>%
+  st_drop_geometry()
+
+print("Counties with missing predictions:")
+print(failed[, c(county_col, "county_join")])
+```
+
+```{r}
+options(bitmapType = "cairo")
+```
+# OBSERVED MALARIA MAP
+
+```{r}
+
+
+ggplot(kenya_map2) +
+  geom_sf(aes(fill = observed),
+          color = "black",
+          linewidth = 0.2) +
+  scale_fill_viridis_c(
+    option = "plasma",
+    na.value = "grey80"
+  ) +
+  labs(
+    title = "Observed Malaria Incidence in Kenya",
+    fill = "Incidence"
+  ) +
+  theme_minimal()
+
+# SAVE
+ggsave("Observed_Malaria_Map.png",
+       width = 10,
+       height = 8,
+       dpi = 300)
+
+```
+
+
+#  XGBOOST PREDICTED RISK MAP
+
+```{r}
+
+
+ggplot(kenya_map2) +
+  geom_sf(aes(fill = xgb_pred),
+          color = "black",
+          linewidth = 0.2) +
+  scale_fill_viridis_c(
+    option = "inferno",
+    na.value = "grey80"
+  ) +
+  labs(
+    title = "Predicted Malaria Risk Map (XGBoost)",
+    fill = "Predicted Risk"
+  ) +
+  theme_minimal()
+
+# SAVE
+ggsave("XGBoost_Risk_Map.png",
+       width = 10,
+       height = 8,
+       dpi = 300)
+
+```
+
+
+
+# SPATIAL PREDICTION ERROR MAP
+
+```{r}
+
+
+kenya_map2$error_xgb <- kenya_map2$xgb_pred - kenya_map2$observed
+
+ggplot(kenya_map2) +
+
+  geom_sf(aes(fill = error_xgb),
+          color = "black",
+          linewidth = 0.2) +
+
+ scale_fill_gradient2(
+  low = "darkblue",
+  mid = "white",
+  high = "darkred",
+  midpoint = 0,
+  limits = c(
+    min(kenya_map2$error_xgb),
+    max(kenya_map2$error_xgb)
+  )
+) +
+
+  labs(
+    title = "Spatial Prediction Error Map (XGBoost)",
+    fill = "Prediction Error"
+  ) +
+
+  theme_minimal()
+```
+
+Interpretation:
+The spatial prediction error map shows the difference between predicted and observed malaria incidence across counties. Counties such as Lamu, Garissa, and parts of eastern Kenya showed negative prediction errors, indicating that the model underestimated malaria incidence in these regions, while several western and central counties showed smaller errors, suggesting better model performance in those areas.
+# RANDOM FOREST MAP
+
+
+
+
+```{r}
+
+
+ggplot(kenya_map2) +
+  geom_sf(aes(fill = rf_pred),
+          color = "black",
+          linewidth = 0.2) +
+  scale_fill_viridis_c(
+    option = "magma",
+    na.value = "grey80"
+  ) +
+  labs(
+    title = "Predicted Malaria Risk Map (Random Forest)",
+    fill = "Predicted Risk"
+  ) +
+  theme_minimal()
+
+ggsave("RF_Risk_Map.png",
+       width = 10,
+       height = 8,
+       dpi = 300)
+
+```
+
+#  CREATE HOTSPOT CLASSES
+
+```{r}
+
+kenya_map2 <- kenya_map2 %>%
+  mutate(
+    risk_class = case_when(
+      xgb_pred <= quantile(xgb_pred, 0.33, na.rm=TRUE) ~ "Low",
+      xgb_pred <= quantile(xgb_pred, 0.66, na.rm=TRUE) ~ "Moderate",
+      TRUE ~ "High"
+    )
+  )
+
+table(kenya_map2$risk_class)
+```
+
+# HOTSPOT MAP
+
+
+```{r}
+
+
+
+
+ggplot(kenya_map2) +
+  geom_sf(aes(fill = risk_class),
+          color = "black",
+          linewidth = 0.2) +
+  scale_fill_manual(values = c(
+    "Low" = "forestgreen",
+    "Moderate" = "gold",
+    "High" = "red3"
+  )) +
+  labs(
+    title = "Malaria Hotspot Risk Map",
+    fill = "Risk Level"
+  ) +
+  theme_minimal()
+
+ggsave("Hotspot_Risk_Map.png",
+       width = 10,
+       height = 8,
+       dpi = 300)
+
+```
+
+# LABEL COUNTIES ON MAP
+
+```{r}
+
+
+centroids <- st_centroid(kenya_map2)
+
+ggplot(kenya_map2) +
+  geom_sf(aes(fill = xgb_pred),
+          color = "red",
+          linewidth = 0.2) +
+
+  geom_sf_text(
+    data = centroids,
+    aes(label = county_join),
+    size = 2
+  ) +
+
+  scale_fill_viridis_c(option = "inferno") +
+
+  labs(
+    title = "Predicted Malaria Risk with County Labels",
+    fill = "Risk"
+  ) +
+
+  theme_minimal()
+
+ggsave("Labeled_Risk_Map.png",
+       width = 12,
+       height = 10,
+       dpi = 300)
+```
+
+
+#  EXPORTING FINAL SPATIAL DATA
+```{r}
+
+
+st_write(kenya_map2,
+         "Kenya_Malaria_Risk_Map.geojson",
+         delete_dsn = TRUE)
+
+write.csv(
+  st_drop_geometry(kenya_map2),
+  "Kenya_Malaria_Risk_Table.csv",
+  row.names = FALSE
+)
+
+```
+```{r}
+cat("\n\n")
+cat(" MALARIA RISK MAPS GENERATED\n")
+cat("\n")
+
+cat("Files saved:\n")
+cat("- Observed_Malaria_Map.png\n")
+cat("- XGBoost_Risk_Map.png\n")
+cat("- RF_Risk_Map.png\n")
+cat("- Hotspot_Risk_Map.png\n")
+cat("- Labeled_Risk_Map.png\n")
+cat("- Kenya_Malaria_Risk_Map.geojson\n")
+cat("\n")
+
+```
+
+
+
+
+
+
+#  Saving the Outputs
+
+```{r }
+prediction_export <- test_s %>% 
+  select(county, date, 
+         obs     = incidence_per_1000, 
+         RF      = rf_pred, 
+         XGBoost = xgb_pred
+         )
+
+write.csv(prediction_export, "baseline_predictions.csv", row.names = FALSE)
+
+# Save the metrics table (RMSE, MAE, R2, etc.)
+write.csv(final, "baseline_metrics.csv", row.names = FALSE)
+
+# Cleaned console output
+cat("Success: Results exported to CSV files.\n")
+cat("Observations saved:", nrow(prediction_export), "\n")
+```
+

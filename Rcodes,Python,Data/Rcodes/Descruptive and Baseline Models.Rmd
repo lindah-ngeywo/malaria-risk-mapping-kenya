@@ -1,0 +1,378 @@
+---
+title: "DESCRIPTIVE AND ANALYSIS For MALARIA RISK MAPPING"
+author: "Lindah"
+date: "2026-04-28"
+output: pdf_document
+pdf_document:
+    latex_engine: xelatex
+header-includes:
+  - \usepackage{newunicodechar}
+  - \newunicodechar{−}{-}
+  - \newunicodechar{–}{--}
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE)
+
+if (capabilities("cairo")) {
+  knitr::opts_chunk$set(dev = "cairo_pdf")}
+```
+
+```{r}
+
+# Load libraries
+library(tidyverse)   
+library(lubridate)  
+library(skimr)       
+# Load the data
+data <- read.csv("/home/student25/Documents/THESIS/MSC_THESIS_package_corrected - Revised/SPATIO-TEMPORAL THESIS/DATA/kenya_Malaria_panel.csv")
+
+# Checking the  structure
+str(data)
+head(data)
+```
+\section*{CONVERTING VARIABLE CLEANING AND FORMAT VARIABLES}
+```{r}
+
+data <- data %>%
+  mutate(
+    county = as.factor(county),     
+    date = as.Date(date),         
+    year = year(date),
+    month = month(date)
+  )
+
+# Confirm structure
+str(data)
+```
+
+\subsection*{ VALIDATING THE DATA}
+```{r}
+
+# Check number of rows and columns
+dim(data)
+
+# Check unique counties 
+length(unique(data$county))
+
+# Check duplicates  and missing values
+data %>%
+  count(county, date) %>%
+  filter(n > 1)
+colSums(is.na(data))
+```
+ 
+\subsection*{Detailed summary statistics}
+```{r}
+summary(data)
+```
+
+
+```{r}
+# Full descriptive statistics table
+
+desc_stats <- data %>%
+  select(
+    rainfall,
+    temperature,
+    humidity,
+    ndvi,
+    population,
+    itn,
+    irs,
+    treatment,
+    incidence_per_1000
+  ) %>%
+  summarise_all(
+    list(
+      Mean = mean,
+      SD = sd,
+      Min = min,
+      Max = max
+    ),
+    na.rm = TRUE
+  )
+
+View(desc_stats)
+```
+
+\section*{HISTOGRAM DISTRIBUTION ON MALARIA INCIDENCE}
+```{r}
+# Incidence distribution
+ggplot(data, aes(x = incidence_per_1000)) +
+  geom_histogram(bins = 30, fill = "steelblue") +
+  theme_minimal() +
+  labs(title = "Distribution of Malaria Incidence")
+```
+\subsection*{RAINFALL}
+```{r}
+# Rainfall
+ggplot(data, aes(x = rainfall)) +
+  geom_histogram(bins = 30, fill = "blue") +
+  theme_minimal() +
+  labs(title = "Rainfall Distribution")
+```
+
+\subsubsection*{Rainfall Distribution per County}
+```{r}
+ggplot(data, aes(x = county, y = rainfall)) +
+  geom_boxplot(fill = "blue") +
+  theme_minimal() +
+  labs(title = "Rainfall Distribution per County") +
+  theme(axis.text.x = element_text(angle = 90))
+
+#saving the plot
+ggsave("Rainfall Distribution per County.png", width = 5, height = 4, dpi = 300)
+```
+\subsection*{TEMPERATURE}
+```{r}
+# Temperature
+ggplot(data, aes(x = temperature)) +
+  geom_histogram(bins = 30, fill = "orange") +
+  theme_minimal() +
+  labs(title = "Temperature Distribution")
+```
+
+\subsubsection*{Temperature Distribution per County}
+
+```{r}
+#Temperature influences mosquito development rates.
+ggplot(data, aes(x = reorder(county, temperature, FUN = median), 
+                    y = temperature)) +
+  geom_boxplot(fill = "orange", color = "darkred", outlier.alpha = 0.3) +
+  coord_flip() +
+  labs(title = "Monthly Temperature Variability by County",
+       x = "County", 
+       y = "Temperature (°C)") +
+  theme_minimal()
+ggsave("Temperature Distribution per County.png", width = 5, height = 4, dpi = 300)
+```
+\subsection*{HUMIDITY}
+```{r}
+# Humidity
+ggplot(data, aes(x = humidity)) +
+  geom_histogram(bins = 30, fill = "purple") +
+  theme_minimal() +
+  labs(title = "Humidity Distribution")
+```
+
+\subsubsection*{Humidity Distribution per County}
+
+
+```{r}
+# High humidity is a known driver for malaria transmission.
+ggplot(data, aes(x = reorder(county, humidity, FUN = median), 
+                    y = humidity)) +
+  geom_boxplot(
+    fill = "lightgreen", 
+    color = "darkgreen", 
+    outlier.alpha = 0.3
+  ) +
+  coord_flip() +
+  labs(
+    title = "Monthly Relative Humidity by County",
+    subtitle = "Counties ranked by median humidity levels",
+    x = "County",
+    y = "Humidity (%)"
+  ) +
+  theme_minimal()
+```
+```{r}
+data %>%
+  select(rainfall, temperature, humidity, ndvi) %>%
+  pivot_longer(everything(), names_to = "variable", values_to = "value") %>%
+  ggplot(aes(x = variable, y = value)) +
+  geom_boxplot(fill = "skyblue") +
+  theme_minimal() +
+  labs(title = "Global Comparison of Environmental Variables")
+ggsave(" Environmental Comparison variables.png", width = 5, height = 4, dpi = 300)
+```
+```{r}
+data %>%
+  select(county, rainfall, temperature, humidity, ndvi) %>%
+  pivot_longer(-county, names_to = "variable", values_to = "value") %>%
+  ggplot(aes(x = county, y = value)) +
+  geom_boxplot(fill = "green") +
+  facet_wrap(~variable, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "Predictor Distribution per County") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+\subsection*{BARPLOT MEAN PER COUNTY}
+```{r}
+# Convert to long format
+data_long <- data %>%
+  select(county, rainfall, temperature, humidity, ndvi,
+         population, itn, irs, treatment) %>%
+  pivot_longer(-county, names_to = "variable", values_to = "value")
+
+# Compute mean values
+data_mean <- data_long %>%
+  group_by(county, variable) %>%
+  summarise(mean_value = mean(value, na.rm = TRUE), .groups = "drop")
+
+# Plot
+ggplot(data_mean, aes(x = county, y = mean_value)) +
+  geom_bar(stat = "identity", fill = "steelblue") +
+  facet_wrap(~variable, scales = "free_y") +
+  theme_minimal() +
+  labs(title = "Mean Predictor Values per County") +
+  theme(axis.text.x = element_text(angle = 90))
+```
+\subsection*{TEMPORAL TRENDS}
+```{r}
+selected_counties <- c("Lamu", "Isiolo", "Nairobi", "Kiambu")
+
+data %>%
+  filter(county %in% selected_counties) %>%
+  # Ensure date is recognized as a Date object
+  mutate(date = as.Date(date)) %>% 
+  ggplot(aes(x = date, y = incidence_per_1000, group = 1)) + # Added group = 1
+  geom_line(colour = "darkgreen") +
+  facet_wrap(~ county, scales = "free_y") +
+  labs(title = "Temporal Trends by County",
+       x = "Year",
+       y = "Incidence per 1000") +
+  theme_minimal()
+ggsave("TEMPORAL TRENDS.png", width = 5, height = 4, dpi = 300)
+```
+```{r}
+#  date conversion first
+data$date <- as.Date(data$date)
+
+
+ggplot(data, aes(x = date, y = incidence_per_1000, group = county, colour = county)) +
+  geom_line() +
+
+  scale_x_date(limits = c(as.Date("2016-01-01"), as.Date("2025-12-01")), 
+               date_breaks = "1 year", 
+               date_labels = "%Y") +
+  labs(title = "Malaria Incidence Over Time by County",
+       x = "Year",
+       y = "Incidence per 1000") +
+  theme_minimal() +
+  theme(legend.position = "none",
+        axis.text.x = element_text(angle = 45, hjust = 1))
+ggsave("TEMPORAL TRENDS for  Malaria Incidence Over Time by County.png", width = 5, height = 4, dpi = 300)
+```
+
+\subsection*{SEASONALITY OF ANALYSIS}
+ 
+ 
+```{r}
+
+# Convert the columns explicitly to simple numeric vectors
+data$month <- as.numeric(unlist(data$month))
+data$incidence_per_1000 <- as.numeric(unlist(data$incidence_per_1000))
+
+ggplot(data, aes(x = factor(month), y = incidence_per_1000)) +
+  geom_boxplot(fill = "purple", outlier.colour = "red", outlier.shape = 1) +
+  theme_minimal() +
+  labs(title = "Seasonal Variation in Malaria Incidence",
+       subtitle = "Aggregated monthly distribution (2016-2025)",
+       x = "Month",
+       y = "Incidence per 1000")
+ggsave("SEASONALITY OF ANALYSIS.png", width = 5, height = 4, dpi = 300)
+```
+ 
+\subsection*{COUNTY INNCIDENCE COMPARISON}
+```{r}
+ggplot(data, aes(x = county, y = incidence_per_1000)) +
+  geom_boxplot(fill = "red") +
+  theme_minimal() +
+  labs(title = "Malaria Incidence per County") +
+  theme(axis.text.x = element_text(angle = 90))
+ggsave("COUNTY INNCIDENCE COMPARISON.png", width = 5, height = 4, dpi = 300)
+```
+\subsection*{RELATIONSHIP BTW PREDICTORS AND TARGETS}
+```{r}
+colSums(is.na(data))
+```
+
+\subsubsection*{Line plot of annual mean incidence}
+```{r}
+
+# Create the annual dataframe from your main data object
+annual <- data %>%
+  group_by(year) %>%
+  summarise(
+    Mean_Incidence = mean(incidence_per_1000, na.rm = TRUE),
+    SD = sd(incidence_per_1000, na.rm = TRUE)
+  )
+
+# Now run your plot code
+ggplot(annual, aes(x = year, y = Mean_Incidence)) +
+  geom_line(colour = "skyblue", linewidth = 1.2) +
+  geom_point(colour = "red", size = 3) +
+  geom_errorbar(aes(ymin = Mean_Incidence - SD, 
+                    ymax = Mean_Incidence + SD), 
+                width = 0.2, colour = "grey") +
+  scale_x_continuous(breaks = 2016:2025) +
+  labs(
+    title   = "Annual Mean Malaria Incidence Rate (2016–2025)",
+    subtitle = "Error bars show ± 1 standard deviation across all county-months",
+    x = "Year",
+    y = "Mean Incidence (cases per 1,000 per month)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(panel.grid.minor = element_blank())
+ggsave("Annual Mean Malaria Incidence Rate (2016–2025).png", width = 5, height = 4, dpi = 300)
+```
+\subsection*{HEATMAP CORRELATION}
+```{r}
+# Correlation matrix
+num_data <- data[, c("rainfall","temperature","humidity",
+                     "ndvi","population","itn","irs",
+                     "treatment","incidence_per_1000")]
+
+cor_matrix <- cor(num_data, use = "complete.obs")
+
+# Convert to long format - Ensure names match the ggplot call
+cor_long <- as.data.frame(as.table(cor_matrix))
+names(cor_long) <- c("Var1", "Var2", "Correlation")
+
+# plotting with matching names
+ggplot(cor_long, aes(Var1, Var2, fill = Correlation)) + # Use cor_long and Correlation
+  geom_tile(color = "black", linewidth = 0.5) +  
+  geom_text(aes(label = round(Correlation, 2)), size = 3) + # Use Correlation
+  scale_fill_gradient2(low = "lightblue", mid = "white", high = "darkblue", midpoint = 0) +
+  labs(title = "Correlation Matrix: Malaria Incidence & Covariates",
+       subtitle = "Assessing multicollinearity between environmental and intervention factors",
+       x = "",
+       y = "") +
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_line(color = "grey70", linewidth = 0.3),  
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    panel.border = element_rect(color = "black", fill = NA, linewidth = 0.7)  
+  )
+ggsave("HEATMAP CORRELATION.png", width = 5, height = 4, dpi = 300)
+```
+Interpretation:
+Rainfall shows the strongest positive correlation with malaria incidence $(r=0.54)$, indicating that increased rainfall was associated with higher malaria transmission across counties.
+Population density shows a moderate negative correlation with malaria incidence $(r=−0.37)$, suggesting that malaria incidence was generally lower in more densely populated counties within the study period.
+Temperature, humidity, NDVI, ITN coverage, IRS, and treatment variables shows weak linear correlations with malaria incidence, indicating that their effects on malaria transmission are likely nonlinear and better captured by machine learning and deep learning models.
+```{r}
+ggplot(data, aes(x = rainfall, y = incidence_per_1000)) +
+  geom_point(alpha = 0.3) +
+  geom_smooth(method = "loess", color = "blue") +
+  theme_minimal() +
+  labs(title = "Rainfall vs Malaria Incidence")
+```
+
+
+
+
+ 
+ 
+
+ 
+
+
+
+
+
+
+

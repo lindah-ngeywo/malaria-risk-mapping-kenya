@@ -1,0 +1,171 @@
+
+\chapter{LITERATURE REVIEW}
+
+\section{Spatio-Temporal Disease Modelling Theory}
+
+
+
+Spatio-temporal disease modelling theory explains how diseases such as malaria change across both location and time due to environmental, climatic, and population-related factors \cite{Cressie1993}. In malaria transmission, nearby locations often experience similar environmental conditions, mosquito breeding habitats, and movement patterns, which may result in comparable malaria incidence levels. At the same time, malaria transmission in one period may influence future outbreaks because mosquito development, parasite incubation, and human exposure occur over time. The theory is mainly based on two important concepts: spatial dependence and temporal dependence. Spatial dependence means that neighbouring areas are likely to share similar disease patterns because they experience related environmental and ecological conditions. Temporal dependence means that past malaria transmission patterns can influence future transmission trends. According to Stoyan et al \cite{Stoyan2014Statistical}, spatio-temporal statistical models represent disease risk as a process that changes continuously over space and time. Such models can enhance the predictive performance  compared to traditional regression approaches because they account for spatial and temporal relationships simultaneously. However, several statistical approaches rely on assumptions such as spatial stationarity and predefined temporal structures, which may not fully capture sudden nonlinear malaria outbreaks caused by rainfall variability, ecological differences, and intervention changes. As a result, traditional statistical models may struggle to represent the highly dynamic malaria transmission patterns observed across ecologically diverse regions of Kenya.
+\section{Machine Learning Theory}
+
+
+Machine learning theory focuses on developing algorithms that learn patterns directly from data in order to make predictions or identify hidden relationships. In malaria prediction studies, machine learning models learn how climatic, environmental, demographic, and intervention-related variables relate to malaria incidence without requiring strict assumptions about the underlying mathematical relationships. Compared with many classical statistical models that often assume linear relationships, machine learning algorithms are capable of modelling complex nonlinear interactions among predictors. 
+According to Hastie \cite{Hastie2009}, machine learning methods such as Random Forest(RF) and XGBoost are capable of identifying nonlinear dependencies and variable interactions in high-dimensional datasets. Random Forest builds numerous decision trees based on using different samples of the training data and combines their predictions to improve stability and reduce variance. XGBoost, on the other hand, uses gradient boosting to sequentially reduce prediction errors and improve model performance through iterative learning. These machine learning approaches are well suited for malaria forecasting because they can handle large numbers of predictors, nonlinear environmental relationships, and delayed climatic effects that are difficult to model using traditional regression-based methods.
+
+\section{Deep Learning and Neural Network Theory}
+
+In malaria prediction, deep learning models automatically learn complex rainfall patterns, environmental interactions, and temporal transmission features directly from data without requiring manual feature specification based  on (Goodfellow et al., 2016 \cite{Goodfellow-et-al-2016}). In spatio-temporal modelling, CNNs learn localized feature interactions by applying sliding spatial filters that detect patterns such as clusters of high rainfall or vegetation. Recurrent architectures such as LSTM and GRU model temporal dependencies by maintaining a memory of previous time steps, allowing the model to learn delayed temporal relationships between climatic conditions and malaria transmission patterns. Transformer architectures further enhance temporal and relational learning using an attention mechanism that weighs the importance of different past time points dynamically. Combining CNN with LSTM, GRU, or Transformer enables simultaneous modelling of spatial and temporal dynamics. However, deep learning models typically require large datasets and high computational resources \cite{Goodfellow-et-al-2016}. In the Kenyan context, where health facility data may be sparse and computing infrastructure limited, careful model design and data aggregation  at county or sub-county level are necessary to make these approaches feasible. Deep learning models provide the more comprehensive representation of spatio-temporal  malaria dynamics; however, their performance advantage becomes significant only when sufficient training data and computational resources are available and otherwise when intergrated as hybrid  models may perform better.
+\section{Conceptual Framework}
+	The  framework shown in Figure~\ref{fig:conceptual_framework} describes how multi-source data contribute to malaria risk prediction within a spatio-temporal process. First, climatic, environmental, demographic, and intervention variables are integrated into a dataset indexed by location and time. The factors jointly influence malaria transmission through their effects on environmental suitability, human exposure, and disease control measures \cite{Caminade2023}. Second, the integrated inputs are analysed using machine learning and hybrid deep learning approaches to explore the relationships among malaria risk factors and their influence on transmission patterns across space and time. As an outcome, the framework produces malaria risk maps and incidence forecasts, providing spatial insights and early warning information for malaria control. Although previous studies have shown that these approaches can improve the prediction of malaria dynamics and support more effective disease surveillance \cite{Egbuna2025}. 
+\begin{figure}[H]
+		\vspace{-0.3cm}
+	\centering
+	\resizebox{0.82\textwidth}{!}{
+		\begin{tikzpicture}[
+			node distance=1.6cm and 2.0cm,
+			every node/.style={font=\small, align=center},
+			box/.style={rectangle, draw, rounded corners, minimum width=3.6cm, minimum height=1.2cm},
+			longbox/.style={rectangle, draw, rounded corners, minimum width=14cm, minimum height=1.2cm},
+			arrow/.style={->, thick}
+			]
+			
+			% Top row
+			\node[box, fill=blue!30] (climate) {
+				\textbf{Climatic factors}\\
+				Rainfall - Temp - Humidity
+			};
+			
+			\node[box, fill=green!30, right=of climate] (env) {
+				\textbf{Environmental}\\
+				NDVI - Elevation - Land
+			};
+			
+			\node[box, fill=orange!40, right=of env] (demo) {
+				\textbf{Demographic}\\
+				Pop. density - Mobility
+			};
+			
+			\node[box, fill=red!40, right=of demo] (interv) {
+				\textbf{Interventions}\\
+				ITNs - IRS - Treatment
+			};
+			
+			% Input 
+			\node[longbox, fill=gray!30, below=1.4cm of env] (input) {
+				Input variables  indexed by county and month
+			};
+			
+			\draw[arrow] (climate) -- (input);
+			\draw[arrow] (env) -- (input);
+			\draw[arrow] (demo) -- (input);
+			\draw[arrow] (interv) -- (input);
+			
+			% System
+			\node[longbox, fill=purple!60, below=of input] (system) {
+				Spatio-temporal modelling system
+			};
+			
+			\draw[arrow] (input) -- (system);
+			
+			% Models row 
+			\node[box, fill=gray!40, below left=1.5cm and -0.8cm of system] (ml) {
+				ML models\\
+				RF - XGBoost\\ 
+			};
+			
+			\node[box, fill=blue!50, right=2.2cm of ml] (lstm) {
+				CNN-LSTM\\
+				Spatial +  temporal memory
+			};
+			
+			\node[box, fill=green!50, right=2.2cm of lstm] (gru) {
+				CNN-GRU\\
+				Spatial + gated\\ temporal memory
+			};
+			
+			\node[box, fill=purple!50, right=2.2cm of gru] (trans) {
+				CNN-Transformer\\
+				Spatial + attention\\ long-range temporal
+			};
+			
+			\draw[arrow] (system.south) -- (ml.north);
+			\draw[arrow] (system.south) -- (lstm.north);
+			\draw[arrow] (system.south) -- (gru.north);
+			\draw[arrow] (system.south) -- (trans.north);
+			
+			% Evaluation
+			\node[longbox, fill=gray!30, below=1.5cm of lstm] (eval) {
+				Model evaluation — RMSE - MAE - R$^2$
+			};
+			
+			\draw[arrow] (ml) -- (eval);
+			\draw[arrow] (lstm) -- (eval);
+			\draw[arrow] (gru) -- (eval);
+			\draw[arrow] (trans) -- (eval);
+			
+			% Outputs
+			\node[box, fill=green!50, below left=1.5cm and -1cm of eval] (maps) {
+				County-level risk maps\\
+				High-resolution spatial prediction
+			};
+			
+			\node[box, fill=orange!50, right=3cm of maps] (forecast) {
+				Incidence forecasts\\
+				Early warning indicators (DHIS2)
+			};
+			
+			\draw[arrow] (eval) -- (maps);
+			\draw[arrow] (eval) -- (forecast);
+			
+		\end{tikzpicture}
+	}
+	\caption{Conceptual framework linking multi-source inputs to hybrid spatio-temporal models for malaria prediction.}
+	\label{fig:conceptual_framework}
+\end{figure}
+\FloatBarrier
+	\vspace{-0.3cm}
+\section{Empirical Literature Review}
+
+\subsection{Global Studies}
+
+Globally, malaria modelling has been dominated by statistical approaches. The shift toward machine learning and deep learning has been driven by the need to capture nonlinear climate-malaria relationships that statistical models excludes. Bhatt et al. (2015) \cite{Bhatt2015} developed a Bayesian geostatistical spatio-temporal model using extensive survey and environmental data to quantify malaria decline . Its limitation is that it assumes a Gaussian process and linear covariate effects, which cannot represent threshold responses like malaria risk that  arise after rainfall exceeds a certain level. Similarly, Weiss et al. (2019) \cite{Weiss2019Mapping} generated high-resolution malaria risk maps by integrating prevalence, climate, and population datasets.  Collectively, these studies demonstrate the strengths of Bayesian spatio-temporal approaches in risk mapping and uncertainty estimation. However, their reliance on predefined statistical structures may limit their ability to capture complex nonlinear malaria-environment relationships compared with modern machine learning approaches.
+\subsection{Regional Studies (Africa)}
+
+In sub-Saharan Africa, there has been a gradual shift toward machine learning approaches. Okundalaye et al. (2025) \cite{Okundalaye2025Climate-based} carried out the evaluation of climate-based prediction models for malaria prevalence in Nigeria  by comparing traditional statistical methods (Multiple Linear Regression) with  machine learning approaches including Random Forest, SVR, XGBoost, and LSTM. The researchers found evidence that climate-driven ML model, especially XGBoost  achieved the highest accuracy ($R^2=0.89$) and performed much better than linear models. This is due to the fact that tree-based ensemble models take care of non-linear interaction terms without explicit specification. In addition, their analysis showed that the performance of prediction varies among ecological zones, and data quality concerns can reduce prediction capacity in conflict-afflicted regions.  These results support the importance of using climate-driven ensemble model in early warning system and targeted malaria interventions in Nigeria. Moreover, Ly et al. (2025) \cite{Ly2025Forecasting} used XGBoost and related algorithms for malaria forecasting in Senegal, achieving high accuracy in capturing temporal trends but without integrating spatio interactions or deep learning architectures. Together, these regional studies show that while ensemble ML approaches demonstrated stronger predictive performance, most lack explicit spatio modelling.
+
+\subsection{Local Studies (Kenya)}
+
+In Kenya, malaria prediction studies have increasingly adopted machine learning and artificial intelligence techniques, although fully integrated spatio-temporal frameworks remain limited. Nyawanda et al. (2024) \cite{Nyawanda2024Forecasting} applied Empirical Dynamic Modelling to capture nonlinear temporal dynamics but did not include spatio modelling. The absence of explicit spatial components limits the ability of the model to capture geographically clustered malaria outbreaks, particularly in high transmission regions surrounding the Lake Victoria basin. Muriithi et al. (2024) \cite{Muriithi2024A} used supervised machine learning models such as K-Nearest Neighbors(KNN), SVM, RF, Tree Bagging, and Boosting techniques to predict malaria occurrence in Kenya. The study reported strong predictive performance, especially with RF, demonstrating the potential of machine learning in malaria prediction. However, the modelling approach did not explicitly capture spatio-temporal dependencies across regions and mainly focused on prediction accuracy rather than sequential transmission dynamics and spatial interactions influencing malaria spread. Odhiambo et al. (2020)\cite{Odhiambo2020} demonstrated that malaria risk mapping in sub-Saharan Africa is dominated by Bayesian geostatistical models, with limited use of variable selection and model validation. These findings indicate that Kenyan malaria modelling studies have increasingly adopted machine learning approaches, yet few have combined strong predictive performance with spatio-temporal learning and model interpretability. Consequently, important challenges related to spatial dependence and operational forecasting remain insufficiently addressed.
+
+\section{Methodological Review}
+\subsection{Traditional Machine Learning Approaches}
+
+According to the systematic review by Egbuna et al. \cite{Egbuna2025}, the machine learning models used for predicting malaria were found to outperform traditional statistical techniques, with some studies reporting predictive accuracies higher than 85\%. The authors also suggested that using hybrid learning could contribute to making predictions more reliable by combining several types of models. At the same time, the review pointed out challenges related to data limitations, computational cost, and model interpretability, especially in large-scale public health applications. The study further emphasized the importance of explainable artificial intelligence (XAI) techniques in improving transparency and trust in malaria prediction systems. However, the review provided limited discussion of additional evaluation measures such as RMSE, MAE, and AUC, which are also important when comparing predictive models across studies.
+
+Similarly, Dhuguma et al. \cite{Dhuguma2025Understanding} applied XGBoost to predict malaria incidence in the Kelem Wollega Zone of Ethiopia using climatic and environmental predictors. Their model achieved a mean AUC of 0.99 and a mean F1-score of 0.95, indicating strong predictive performance. The study demonstrated the potential of machine learning methods for malaria forecasting in environmentally sensitive regions. However, the modelling framework mainly relied on conventional machine learning methods and paid limited attention to spatial and temporal relationships between neighbouring districts and seasonal transmission patterns.
+
+In Kenya, Muriithi et al. (2025) \cite{muriithi2025explainable} applied explainable artificial intelligence techniques, including SHAP-based interpretation, to improve transparency in malaria risk prediction models developed using RF and XGBoost algorithms. The study demonstrated the potential of explainable machine learning approaches for identifying influential malaria risk factors in Kenya. Although the study improved model interpretability, greater focus was placed on prediction performance than on integrated hybrid deep learning and explicit spatio-temporal modelling transmission dependencies across counties. Overall, these studies show the increasing use of machine learning approaches for malaria forecasting across Africa. Nevertheless, many existing studies still provide limited integration of explicit spatio-temporal learning and hybrid deep learning architectures for modelling complex malaria transmission dynamics.
+
+
+\subsection{Deep Learning Approaches}
+
+Deep learning models improve malaria prediction by learning complex nonlinear relationships directly from climatic, environmental, and temporal data. In particular, CNN architectures extract localized feature patterns by applying convolutional filters across input sequences, enabling the model to identify spatial and environmental interactions associated with malaria transmission dynamics. An LSTM learns temporal sequences by remembering past malaria trends and updating its memory step by step. Ooko and Kagwi (2024)\cite{Ooko2024} applied a CNN to classify microscopic blood cell images for malaria diagnosis in Kenya, achieving 94\% accuracy. However, their work addresses diagnosis , not prediction of future incidence. This distinction is important because diagnosis models operate on patient blood samples, whereas prediction models require spatio-temporal climate and epidemiological data. 
+
+Srivastava et al. (2025)\cite{Srivastava2025} developed three deep learning approaches for forecasting Plasmodium falciparum parasite rate in children across sub-Saharan Africa: a Spatio-temporal Transformer, a Patch-based Time Series Transformer , and a Spatio-Temporal Neural ODE. Using historical prevalence data (1900--2015) and climate variables from NASA's POWER project, they found that the Spatio-temporal Transformer yielded the highest predictive accuracy, while the Neural ODE better captured temporal continuity and uncertainty dynamics. However, both studies  focused on continental-scale prevalence  rather than  future incidence does not explicitly incorporate localized spatial and temporal dependencies relevant for operational malaria forecasting. Therefore, it emphasizes the need of  incoporating hybrid deep learning models. 
+
+\subsection{Hybrid Deep Learning Models}
+
+Hybrid deep learning models combine CNNs with recurrent architectures such as LSTM, GRU, or Transformers to jointly learn spatio-temporal patterns in malaria data. This integration improves prediction compared to using either traditional machine learning or single deep learning models.
+
+A recent preprint study by Kanjagaile et al. (2026) proposed a hybrid 3DCNN-LSTM framework combined with Cellular Automata for malaria risk surveillance in Dar es Salaam, Tanzania. The 3DCNN processes spatial-temporal volumes directly (height, width, time), while LSTM captures sequential dependencies. The CA model simulates spatial spread dynamics.The framework demonstrated strong capability in identifying localized high-risk malaria transmission zones in Kigamboni South and Msongola. However, it  focuses on a single urban area (Dar es Salaam), and does not compare its hybrid architecture against other hybrid variants like CNN-GRU or CNN-Transformer on the same dataset. Additionally, the CA component introduces additional parameters that may overfit to the specific spatial patterns of Dar es Salaam, limiting transferability.
+
+The above mentioned literature review reveals some critical shortcomings of existing methods used for predicting malaria dynamics. First, many traditional statistical models are able to capture spatial relationships but cannot model the nonlinearity and threshold effect associated with the malaria transmission. Second, although machine learning models generally improve predictive accuracy, many studies does not pay sufficient attention to spatial and temporal dependencies, reducing their ability to fully capture clustered transmission patterns across regions. Third, hybrid deep learning models have the potential to jointly learn spatial and temporal malaria dynamics, but they are still rarely implemented and evaluated under similar data conditions. In addition, only a few studies have provided consistent comparative evaluation of hybrid architectures such as CNN-LSTM, CNN-GRU, and CNN-Transformer using the same county-level dataset. This makes it difficult to determine which modelling approach performs best for operational malaria forecasting in highly heterogeneous transmission environments such as Kenya.
+
+These limitations affect the reliability and practical applicability of current malaria prediction models, especially for public health planning and targeted intervention allocation. Therefore, We address these gaps by developing and comparatively evaluating hybrid spatio-temporal prediction models within a unified framework using county-level malaria data from Kenya to improve both predictive performance and practical relevance.
+
+
+
+
+
+
+
